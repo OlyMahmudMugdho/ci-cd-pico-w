@@ -1,0 +1,73 @@
+
+name: Build Raspberry Pi Pico W
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install Pico W core
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core update-index
+          arduino-cli core install rp2040:rp2040
+
+      - name: Compile for Pico W
+        run: |
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn rp2040:rp2040:rpipicow \
+            --output-dir build \
+            .
+
+      - name: Generate UF2 and HEX
+        run: |
+          set -e
+
+          UF2=$(find build -maxdepth 1 -name '*.uf2' | head -n 1)
+          ELF=$(find build -maxdepth 1 -name '*.elf' | head -n 1)
+
+          if [ -z "$UF2" ] || [ -z "$ELF" ]; then
+            echo "Build did not produce UF2 and ELF files"
+            ls -la build
+            exit 1
+          fi
+
+          cp "$UF2" build/pico-w-wifi.uf2
+
+          TOOLCHAIN=$(find "$HOME/.arduino15/packages/rp2040" \
+            -type f -name arm-none-eabi-objcopy | head -n 1)
+
+          if [ -z "$TOOLCHAIN" ]; then
+            echo "arm-none-eabi-objcopy not found"
+            exit 1
+          fi
+
+          "$TOOLCHAIN" -O ihex "$ELF" build/pico-w-wifi.hex
+
+          ls -lh build/
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pico-w-wifi-firmware
+          path: |
+            build/pico-w-wifi.uf2
+            build/pico-w-wifi.hex
+          if-no-files-found: error
+          retention-days: 30
