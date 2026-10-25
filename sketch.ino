@@ -1,6 +1,6 @@
 #include <WiFi.h>
 
-const char* ssid = "Wokwi-GUEST";
+const char* ssid = "Logicon-GUEST";
 const char* password = "";
 
 void setup() {
