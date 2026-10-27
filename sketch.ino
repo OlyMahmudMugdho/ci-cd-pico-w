@@ -17,41 +17,41 @@ void updateTodo(int id);
 void deleteTodo(int id);
 
 void setup() {
-  Serial.begin(115200);
+  Serial1.begin(115200);
   delay(2000);
 
-  Serial.println("\n--- Pico W JSON CRUD Demo ---");
+  Serial1.println("\n--- Pico W JSON CRUD Demo ---");
 
   // Connect to Wi-Fi
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  Serial.print("Connecting to Wi-Fi");
+  Serial1.print("Connecting to Wi-Fi");
 
   unsigned long startTime = millis();
 
   while (WiFi.status() != WL_CONNECTED &&
          millis() - startTime < 30000) {
     delay(500);
-    Serial.print(".");
+    Serial1.print(".");
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWi-Fi connection failed.");
-    Serial.println("Check SSID, password and network security.");
+    Serial1.println("\nWi-Fi connection failed.");
+    Serial1.println("Check SSID, password and network security.");
     return;
   }
 
-  Serial.println("\nWi-Fi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  Serial1.println("\nWi-Fi connected!");
+  Serial1.print("IP address: ");
+  Serial1.println(WiFi.localIP());
 
   createTodo();
   readTodo(1);
   updateTodo(1);
   deleteTodo(1);
 
-  Serial.println("\n--- CRUD Demo Finished ---");
+  Serial1.println("\n--- CRUD Demo Finished ---");
 }
 
 void loop() {
@@ -60,16 +60,16 @@ void loop() {
 
 // Common response/error reporting
 void printResponse(HTTPClient& http, int code) {
-  Serial.print("HTTP status: ");
-  Serial.println(code);
+  Serial1.print("HTTP status: ");
+  Serial1.println(code);
 
   if (code > 0) {
     String response = http.getString();
-    Serial.println("Response:");
-    Serial.println(response);
+    Serial1.println("Response:");
+    Serial1.println(response);
   } else {
-    Serial.print("HTTP error: ");
-    Serial.println(http.errorToString(code));
+    Serial1.print("HTTP error: ");
+    Serial1.println(http.errorToString(code));
   }
 }
 
@@ -80,10 +80,10 @@ void createTodo() {
   HTTPClient http;
   http.setInsecure();  // Test only: skips certificate verification
 
-  Serial.println("\n[POST] Creating todo...");
+  Serial1.println("\n[POST] Creating todo...");
 
   if (!http.begin(String(base_url))) {
-    Serial.println("Could not start HTTP connection.");
+    Serial1.println("Could not start HTTP connection.");
     return;
   }
 
@@ -112,19 +112,19 @@ void readTodo(int id) {
 
   String url = String(base_url) + "/" + String(id);
 
-  Serial.print("\n[GET] Reading todo ");
-  Serial.println(id);
+  Serial1.print("\n[GET] Reading todo ");
+  Serial1.println(id);
 
   if (!http.begin(url)) {
-    Serial.println("Could not start HTTP connection.");
+    Serial1.println("Could not start HTTP connection.");
     return;
   }
 
   int code = http.GET();
 
   if (code > 0) {
-    Serial.print("HTTP status: ");
-    Serial.println(code);
+    Serial1.print("HTTP status: ");
+    Serial1.println(code);
 
     if (code == HTTP_CODE_OK) {
       JsonDocument doc;
@@ -132,24 +132,24 @@ void readTodo(int id) {
           deserializeJson(doc, http.getStream());
 
       if (!error) {
-        Serial.print("User ID: ");
-        Serial.println(doc["userId"] | 0);
+        Serial1.print("User ID: ");
+        Serial1.println(doc["userId"] | 0);
 
-        Serial.print("Todo ID: ");
-        Serial.println(doc["id"] | 0);
+        Serial1.print("Todo ID: ");
+        Serial1.println(doc["id"] | 0);
 
-        Serial.print("Title: ");
-        Serial.println(doc["title"] | "");
+        Serial1.print("Title: ");
+        Serial1.println(doc["title"] | "");
 
-        Serial.print("Completed: ");
-        Serial.println((doc["completed"] | false)
+        Serial1.print("Completed: ");
+        Serial1.println((doc["completed"] | false)
                            ? "Yes" : "No");
       } else {
-        Serial.print("JSON parsing failed: ");
-        Serial.println(error.c_str());
+        Serial1.print("JSON parsing failed: ");
+        Serial1.println(error.c_str());
       }
     } else {
-      Serial.println(http.getString());
+      Serial1.println(http.getString());
     }
   } else {
     printResponse(http, code);
@@ -167,11 +167,11 @@ void updateTodo(int id) {
 
   String url = String(base_url) + "/" + String(id);
 
-  Serial.print("\n[PUT] Updating todo ");
-  Serial.println(id);
+  Serial1.print("\n[PUT] Updating todo ");
+  Serial1.println(id);
 
   if (!http.begin(url)) {
-    Serial.println("Could not start HTTP connection.");
+    Serial1.println("Could not start HTTP connection.");
     return;
   }
 
@@ -201,11 +201,11 @@ void deleteTodo(int id) {
 
   String url = String(base_url) + "/" + String(id);
 
-  Serial.print("\n[DELETE] Deleting todo ");
-  Serial.println(id);
+  Serial1.print("\n[DELETE] Deleting todo ");
+  Serial1.println(id);
 
   if (!http.begin(url)) {
-    Serial.println("Could not start HTTP connection.");
+    Serial1.println("Could not start HTTP connection.");
     return;
   }
 
