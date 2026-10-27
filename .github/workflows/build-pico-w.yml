@@ -27,6 +27,11 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install rp2040:rp2040
 
+      - name: Install ArduinoJson library
+        run: |
+          arduino-cli lib update-index
+          arduino-cli lib install "ArduinoJson"
+
       - name: Prepare sketch directory
         run: |
           mkdir -p sketch
@@ -35,7 +40,6 @@ jobs:
       - name: Compile for Pico W
         run: |
           mkdir -p build
-
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipicow \
             --output-dir build \
@@ -49,13 +53,12 @@ jobs:
           ls -lh build/
 
           ELF=$(find build -maxdepth 1 -name '*.elf' -print -quit)
+          UF2=$(find build -maxdepth 1 -name '*.uf2' -print -quit)
 
           if [ -z "$ELF" ]; then
             echo "ERROR: ELF file was not generated."
             exit 1
           fi
-
-          UF2=$(find build -maxdepth 1 -name '*.uf2' -print -quit)
 
           if [ -z "$UF2" ]; then
             echo "ERROR: UF2 file was not generated."
