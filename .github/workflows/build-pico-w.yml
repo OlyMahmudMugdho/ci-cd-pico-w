@@ -1,5 +1,5 @@
 
-name: Build Raspberry Pi Pico W Firmware
+name: Build Pico W MQTT WebSocket Firmware
 
 on:
   push:
@@ -27,19 +27,19 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install rp2040:rp2040
 
-      - name: Install ArduinoJson library
+      - name: Install MQTT and WebSocket libraries
         run: |
           arduino-cli lib update-index
-          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "MQTTPubSubClient"
+          arduino-cli lib install "WebSockets"
 
-      - name: Prepare sketch directory
+      - name: Prepare sketch
         run: |
-          mkdir -p sketch
+          mkdir -p sketch build
           cp sketch.ino sketch/sketch.ino
 
       - name: Compile for Pico W
         run: |
-          mkdir -p build
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipicow \
             --output-dir build \
@@ -49,43 +49,39 @@ jobs:
         run: |
           set -e
 
-          echo "Build output:"
-          ls -lh build/
-
           ELF=$(find build -maxdepth 1 -name '*.elf' -print -quit)
           UF2=$(find build -maxdepth 1 -name '*.uf2' -print -quit)
 
-          if [ -z "$ELF" ]; then
-            echo "ERROR: ELF file was not generated."
+          test -n "$ELF" || {
+            echo "ELF firmware missing"
             exit 1
-          fi
+          }
 
-          if [ -z "$UF2" ]; then
-            echo "ERROR: UF2 file was not generated."
+          test -n "$UF2" || {
+            echo "UF2 firmware missing"
             exit 1
-          fi
+          }
 
-          cp "$UF2" build/pico-w-wifi.uf2
+          cp "$UF2" build/pico-w-mqtt-ws.uf2
 
           OBJCOPY=$(find "$HOME/.arduino15/packages/rp2040" \
             -type f -name arm-none-eabi-objcopy -print -quit)
 
-          if [ -z "$OBJCOPY" ]; then
-            echo "ERROR: arm-none-eabi-objcopy not found."
+          test -n "$OBJCOPY" || {
+            echo "arm-none-eabi-objcopy missing"
             exit 1
-          fi
+          }
 
-          "$OBJCOPY" -O ihex "$ELF" build/pico-w-wifi.hex
+          "$OBJCOPY" -O ihex "$ELF" build/pico-w-mqtt-ws.hex
 
-          echo "Generated firmware:"
-          ls -lh build/pico-w-wifi.*
+          ls -lh build/pico-w-mqtt-ws.*
 
-      - name: Upload UF2 and HEX artifacts
+      - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pico-w-wifi-firmware
+          name: pico-w-mqtt-ws-firmware
           path: |
-            build/pico-w-wifi.uf2
-            build/pico-w-wifi.hex
+            build/pico-w-mqtt-ws.uf2
+            build/pico-w-mqtt-ws.hex
           if-no-files-found: error
           retention-days: 30
