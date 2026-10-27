@@ -1,216 +1,128 @@
 
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
+#include <WebSocketsClient.h>
+#include <MQTTPubSubClient.h>
 
-// -------- Wi-Fi Configuration --------
-const char* ssid = "Logicon-GUEST";
-const char* password = "";
+// Wi-Fi credentials
+const char* WIFI_SSID = "Logicon-GUEST";
+const char* WIFI_PASSWORD = "";
 
-// Correct base URL: no todo ID here
-const char* base_url = "https://jsonplaceholder.typicode.com/todos";
+// HiveMQ public WebSocket broker
+const char* MQTT_HOST = "broker.hivemq.com";
+const uint16_t MQTT_PORT = 8000;
+const char* MQTT_PATH = "/mqtt";
 
-// -------- Function Prototypes --------
-void createTodo();
-void readTodo(int id);
-void updateTodo(int id);
-void deleteTodo(int id);
+// Choose a unique topic prefix for your device
+const char* TOPIC_PREFIX = "pico-w-demo-74291";
 
-void setup() {
-  Serial1.begin(115200);
-  delay(2000);
+String publishTopic;
+String subscribeTopic;
 
-  Serial1.println("\n--- Pico W JSON CRUD Demo ---");
+WebSocketsClient client;
+MQTTPubSubClient mqtt;
 
-  // Connect to Wi-Fi
+unsigned long lastPublish = 0;
+const unsigned long PUBLISH_INTERVAL = 5000;
+
+bool connectWiFi() {
+  Serial.print("Connecting to Wi-Fi");
+
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  Serial1.print("Connecting to Wi-Fi");
-
-  unsigned long startTime = millis();
+  unsigned long start = millis();
 
   while (WiFi.status() != WL_CONNECTED &&
-         millis() - startTime < 30000) {
+         millis() - start < 30000) {
     delay(500);
-    Serial1.print(".");
+    Serial.print(".");
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial1.println("\nWi-Fi connection failed.");
-    Serial1.println("Check SSID, password and network security.");
+    Serial.println("\nWi-Fi connection failed.");
+    return false;
+  }
+
+  Serial.println("\nWi-Fi connected!");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  return true;
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+
+  Serial.println("\nPico W MQTT over WebSockets");
+  Serial.println("Broker: broker.hivemq.com:8000");
+
+  publishTopic = String(TOPIC_PREFIX) + "/data";
+  subscribeTopic = String(TOPIC_PREFIX) + "/command";
+
+  if (!connectWiFi()) {
     return;
   }
 
-  Serial1.println("\nWi-Fi connected!");
-  Serial1.print("IP address: ");
-  Serial1.println(WiFi.localIP());
+  // Establish the WebSocket transport.
+  client.begin(MQTT_HOST, MQTT_PORT, MQTT_PATH);
+  client.setReconnectInterval(5000);
 
-  createTodo();
-  readTodo(1);
-  updateTodo(1);
-  deleteTodo(1);
+  // Initialize MQTT over the WebSocket client.
+  mqtt.begin(client);
 
-  Serial1.println("\n--- CRUD Demo Finished ---");
+  String clientId =
+      "PicoW-" + String((uint32_t)micros(), HEX);
+
+  Serial.println("Connecting MQTT client...");
+
+  if (!mqtt.connect(clientId.c_str())) {
+    Serial.println("Initial MQTT connection failed.");
+    Serial.println("Check broker connectivity and library compatibility.");
+  } else {
+    Serial.println("MQTT connected!");
+
+    mqtt.subscribe(
+      subscribeTopic,
+      [](const String& payload, const size_t size) {
+        Serial.print("Received command: ");
+        Serial.println(payload);
+      }
+    );
+
+    Serial.print("Subscribed to: ");
+    Serial.println(subscribeTopic);
+  }
+
+  Serial.print("Publishing to: ");
+  Serial.println(publishTopic);
 }
 
 void loop() {
-  // Operations run once in setup().
-}
-
-// Common response/error reporting
-void printResponse(HTTPClient& http, int code) {
-  Serial1.print("HTTP status: ");
-  Serial1.println(code);
-
-  if (code > 0) {
-    String response = http.getString();
-    Serial1.println("Response:");
-    Serial1.println(response);
-  } else {
-    Serial1.print("HTTP error: ");
-    Serial1.println(http.errorToString(code));
-  }
-}
-
-// 1. CREATE: POST /todos
-void createTodo() {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  http.setInsecure();  // Test only: skips certificate verification
-
-  Serial1.println("\n[POST] Creating todo...");
-
-  if (!http.begin(String(base_url))) {
-    Serial1.println("Could not start HTTP connection.");
+  if (WiFi.status() != WL_CONNECTED) {
+    delay(100);
     return;
   }
 
-  http.addHeader("Content-Type", "application/json");
+  // Process MQTT packets and subscription callbacks.
+  mqtt.update();
 
-  JsonDocument doc;
-  doc["userId"] = 1;
-  doc["title"] = "Buy milk from Pico W";
-  doc["completed"] = false;
+  if (millis() - lastPublish >= PUBLISH_INTERVAL) {
+    lastPublish = millis();
 
-  String body;
-  serializeJson(doc, body);
+    String payload = "{\"device\":\"Pico W\",";
+    payload += "\"status\":\"online\",";
+    payload += "\"uptime_ms\":" + String(millis()) + "}";
 
-  int code = http.POST(body);
-  printResponse(http, code);
-
-  http.end();
-}
-
-// 2. READ: GET /todos/1
-void readTodo(int id) {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  http.setInsecure();
-
-  String url = String(base_url) + "/" + String(id);
-
-  Serial1.print("\n[GET] Reading todo ");
-  Serial1.println(id);
-
-  if (!http.begin(url)) {
-    Serial1.println("Could not start HTTP connection.");
-    return;
-  }
-
-  int code = http.GET();
-
-  if (code > 0) {
-    Serial1.print("HTTP status: ");
-    Serial1.println(code);
-
-    if (code == HTTP_CODE_OK) {
-      JsonDocument doc;
-      DeserializationError error =
-          deserializeJson(doc, http.getStream());
-
-      if (!error) {
-        Serial1.print("User ID: ");
-        Serial1.println(doc["userId"] | 0);
-
-        Serial1.print("Todo ID: ");
-        Serial1.println(doc["id"] | 0);
-
-        Serial1.print("Title: ");
-        Serial1.println(doc["title"] | "");
-
-        Serial1.print("Completed: ");
-        Serial1.println((doc["completed"] | false)
-                           ? "Yes" : "No");
+    if (mqtt.connected()) {
+      if (mqtt.publish(publishTopic, payload)) {
+        Serial.print("Published: ");
+        Serial.println(payload);
       } else {
-        Serial1.print("JSON parsing failed: ");
-        Serial1.println(error.c_str());
+        Serial.println("Publish failed.");
       }
-    } else {
-      Serial1.println(http.getString());
     }
-  } else {
-    printResponse(http, code);
   }
 
-  http.end();
-}
-
-// 3. UPDATE: PUT /todos/1
-void updateTodo(int id) {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  http.setInsecure();
-
-  String url = String(base_url) + "/" + String(id);
-
-  Serial1.print("\n[PUT] Updating todo ");
-  Serial1.println(id);
-
-  if (!http.begin(url)) {
-    Serial1.println("Could not start HTTP connection.");
-    return;
-  }
-
-  http.addHeader("Content-Type", "application/json");
-
-  JsonDocument doc;
-  doc["userId"] = 1;
-  doc["id"] = id;
-  doc["title"] = "Task updated by Pico W";
-  doc["completed"] = true;
-
-  String body;
-  serializeJson(doc, body);
-
-  int code = http.PUT(body);
-  printResponse(http, code);
-
-  http.end();
-}
-
-// 4. DELETE: DELETE /todos/1
-void deleteTodo(int id) {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  http.setInsecure();
-
-  String url = String(base_url) + "/" + String(id);
-
-  Serial1.print("\n[DELETE] Deleting todo ");
-  Serial1.println(id);
-
-  if (!http.begin(url)) {
-    Serial1.println("Could not start HTTP connection.");
-    return;
-  }
-
-  int code = http.sendRequest("DELETE");
-  printResponse(http, code);
-
-  http.end();
+  delay(10);
 }
