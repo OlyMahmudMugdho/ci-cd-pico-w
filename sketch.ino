@@ -1,6 +1,6 @@
 
 #include <WiFi.h>
-#include <WebSocketsClient.h>
+#include <WebSocketsClient.h>  // Include before MQTTPubSubClient.h
 #include <MQTTPubSubClient.h>
 
 // Wi-Fi credentials
@@ -12,23 +12,30 @@ const char* MQTT_HOST = "broker.hivemq.com";
 const uint16_t MQTT_PORT = 8000;
 const char* MQTT_PATH = "/mqtt";
 
-// Choose a unique topic prefix for your device
-const char* TOPIC_PREFIX = "pico-w-demo-74291";
+// Use a unique topic prefix
+const char* TOPIC_PREFIX = "pico-w-demo-change-this-74291";
 
 String publishTopic;
 String subscribeTopic;
 
-WebSocketsClient client;
-MQTTPubSubClient mqtt;
+WebSocketsClient wsClient;
+
+// IMPORTANT: Do not name this object "mqtt",
+// because the library also defines a namespace named mqtt.
+MQTTPubSubClient mqttClient;
 
 unsigned long lastPublish = 0;
+unsigned long lastConnectAttempt = 0;
+
 const unsigned long PUBLISH_INTERVAL = 5000;
+const unsigned long RECONNECT_INTERVAL = 3000;
 
+// Wi-Fi connection
 bool connectWiFi() {
-  Serial.print("Connecting to Wi-Fi");
-
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.print("Connecting to Wi-Fi");
 
   unsigned long start = millis();
 
@@ -50,12 +57,41 @@ bool connectWiFi() {
   return true;
 }
 
+// MQTT message callback
+void onCommand(const String& payload, const size_t size) {
+  Serial.print("Command received: ");
+  Serial.println(payload);
+}
+
+// Connect to MQTT
+bool connectMQTT() {
+  String clientId =
+      "PicoW-" + String((uint32_t)micros(), HEX);
+
+  Serial.println("Connecting to MQTT...");
+
+  if (!mqttClient.connect(clientId)) {
+    Serial.println("MQTT connection attempt failed.");
+    return false;
+  }
+
+  Serial.println("MQTT connected!");
+
+  if (mqttClient.subscribe(subscribeTopic, onCommand)) {
+    Serial.print("Subscribed to: ");
+    Serial.println(subscribeTopic);
+  } else {
+    Serial.println("Subscription failed.");
+  }
+
+  return true;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(2000);
 
-  Serial.println("\nPico W MQTT over WebSockets");
-  Serial.println("Broker: broker.hivemq.com:8000");
+  Serial.println("\nPico W HiveMQ MQTT over WebSockets");
 
   publishTopic = String(TOPIC_PREFIX) + "/data";
   subscribeTopic = String(TOPIC_PREFIX) + "/command";
@@ -64,38 +100,20 @@ void setup() {
     return;
   }
 
-  // Establish the WebSocket transport.
-  client.begin(MQTT_HOST, MQTT_PORT, MQTT_PATH);
-  client.setReconnectInterval(5000);
+  // Start WebSocket transport. "mqtt" is the WebSocket subprotocol.
+  wsClient.begin(MQTT_HOST, MQTT_PORT, MQTT_PATH, "mqtt");
+  wsClient.setReconnectInterval(5000);
 
-  // Initialize MQTT over the WebSocket client.
-  mqtt.begin(client);
+  mqttClient.begin(wsClient);
 
-  String clientId =
-      "PicoW-" + String((uint32_t)micros(), HEX);
-
-  Serial.println("Connecting MQTT client...");
-
-  if (!mqtt.connect(clientId.c_str())) {
-    Serial.println("Initial MQTT connection failed.");
-    Serial.println("Check broker connectivity and library compatibility.");
-  } else {
-    Serial.println("MQTT connected!");
-
-    mqtt.subscribe(
-      subscribeTopic,
-      [](const String& payload, const size_t size) {
-        Serial.print("Received command: ");
-        Serial.println(payload);
-      }
-    );
-
-    Serial.print("Subscribed to: ");
-    Serial.println(subscribeTopic);
-  }
-
-  Serial.print("Publishing to: ");
+  Serial.print("Publish topic: ");
   Serial.println(publishTopic);
+
+  Serial.print("Subscribe topic: ");
+  Serial.println(subscribeTopic);
+
+  // MQTT connection is retried in loop().
+  lastConnectAttempt = millis() - RECONNECT_INTERVAL;
 }
 
 void loop() {
@@ -104,23 +122,33 @@ void loop() {
     return;
   }
 
-  // Process MQTT packets and subscription callbacks.
-  mqtt.update();
+  // Process incoming MQTT data and callbacks.
+  mqttClient.update();
+
+  if (!mqttClient.isConnected()) {
+    if (millis() - lastConnectAttempt >= RECONNECT_INTERVAL) {
+      lastConnectAttempt = millis();
+      connectMQTT();
+    }
+
+    delay(10);
+    return;
+  }
 
   if (millis() - lastPublish >= PUBLISH_INTERVAL) {
     lastPublish = millis();
 
     String payload = "{\"device\":\"Pico W\",";
     payload += "\"status\":\"online\",";
-    payload += "\"uptime_ms\":" + String(millis()) + "}";
+    payload += "\"uptime_ms\":";
+    payload += String(millis());
+    payload += "}";
 
-    if (mqtt.connected()) {
-      if (mqtt.publish(publishTopic, payload)) {
-        Serial.print("Published: ");
-        Serial.println(payload);
-      } else {
-        Serial.println("Publish failed.");
-      }
+    if (mqttClient.publish(publishTopic, payload)) {
+      Serial.print("Published: ");
+      Serial.println(payload);
+    } else {
+      Serial.println("Publish failed.");
     }
   }
 
