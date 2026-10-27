@@ -35,32 +35,32 @@ bool connectWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  Serial.print("Connecting to Wi-Fi");
+  Serial1.print("Connecting to Wi-Fi");
 
   unsigned long start = millis();
 
   while (WiFi.status() != WL_CONNECTED &&
          millis() - start < 30000) {
     delay(500);
-    Serial.print(".");
+    Serial1.print(".");
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWi-Fi connection failed.");
+    Serial1.println("\nWi-Fi connection failed.");
     return false;
   }
 
-  Serial.println("\nWi-Fi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  Serial1.println("\nWi-Fi connected!");
+  Serial1.print("IP address: ");
+  Serial1.println(WiFi.localIP());
 
   return true;
 }
 
 // MQTT message callback
 void onCommand(const String& payload, const size_t size) {
-  Serial.print("Command received: ");
-  Serial.println(payload);
+  Serial1.print("Command received: ");
+  Serial1.println(payload);
 }
 
 // Connect to MQTT
@@ -68,30 +68,30 @@ bool connectMQTT() {
   String clientId =
       "PicoW-" + String((uint32_t)micros(), HEX);
 
-  Serial.println("Connecting to MQTT...");
+  Serial1.println("Connecting to MQTT...");
 
   if (!mqttClient.connect(clientId)) {
-    Serial.println("MQTT connection attempt failed.");
+    Serial1.println("MQTT connection attempt failed.");
     return false;
   }
 
-  Serial.println("MQTT connected!");
+  Serial1.println("MQTT connected!");
 
   if (mqttClient.subscribe(subscribeTopic, onCommand)) {
-    Serial.print("Subscribed to: ");
-    Serial.println(subscribeTopic);
+    Serial1.print("Subscribed to: ");
+    Serial1.println(subscribeTopic);
   } else {
-    Serial.println("Subscription failed.");
+    Serial1.println("Subscription failed.");
   }
 
   return true;
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial1.begin(115200);
   delay(2000);
 
-  Serial.println("\nPico W HiveMQ MQTT over WebSockets");
+  Serial1.println("\nPico W HiveMQ MQTT over WebSockets");
 
   publishTopic = String(TOPIC_PREFIX) + "/data";
   subscribeTopic = String(TOPIC_PREFIX) + "/command";
@@ -106,11 +106,11 @@ void setup() {
 
   mqttClient.begin(wsClient);
 
-  Serial.print("Publish topic: ");
-  Serial.println(publishTopic);
+  Serial1.print("Publish topic: ");
+  Serial1.println(publishTopic);
 
-  Serial.print("Subscribe topic: ");
-  Serial.println(subscribeTopic);
+  Serial1.print("Subscribe topic: ");
+  Serial1.println(subscribeTopic);
 
   // MQTT connection is retried in loop().
   lastConnectAttempt = millis() - RECONNECT_INTERVAL;
@@ -145,10 +145,10 @@ void loop() {
     payload += "}";
 
     if (mqttClient.publish(publishTopic, payload)) {
-      Serial.print("Published: ");
-      Serial.println(payload);
+      Serial1.print("Published: ");
+      Serial1.println(payload);
     } else {
-      Serial.println("Publish failed.");
+      Serial1.println("Publish failed.");
     }
   }
 
